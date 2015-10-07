@@ -6,8 +6,15 @@ package coremidi
 #include <stdio.h>
 #include <unistd.h>
 
-static void MIDISysexProc(MIDISysexSendRequest *request)
+
+extern void go_callback_int(MIDISysexSendRequest *prequest);
+
+static inline void MIDISysexProc(MIDISysexSendRequest *request)
 {
+
+    printf("WE OUT HERE data: %x\n\n", request->data);
+    printf("WE OUT HERE complete: %d\n\n", request->complete);
+    go_callback_int(request);
 
 
 }
@@ -18,6 +25,9 @@ static midi_sysex_proc getSysexProc()
 {
   return *MIDISysexProc;
 }
+
+
+
 */
 import "C"
 import (
@@ -26,6 +36,18 @@ import (
 )
 
 import "fmt"
+
+//export go_callback_int
+func go_callback_int(p1 *C.MIDISysexSendRequest) {
+	fmt.Println("go_callback_int")
+	fmt.Printf("Data: %X ( should be: 0xF0, 0x43, 0x20, 0x09, 0xF7 )", p1.data)
+
+	foo := *(*func(*C.MIDISysexSendRequest))(p1.completionRefCon)
+	foo(p1)
+
+	//foo := *(*func(C.int))(pfoo)
+	//foo(p1)
+}
 
 /*
 // structs
@@ -36,12 +58,15 @@ struct MIDISysexSendRequest {
     Boolean complete;
     Byte reserved[3];
     MIDICompletionProc completionProc;  // completionProc
-    void *completionRefCon;             //
+    void *completionRefCon;             // name?
 };
 
 // functions
 extern OSStatus MIDISendSysex(
     MIDISysexSendRequest *request );
+
+typedef void ( *MIDICompletionProc)(
+    MIDISysexSendRequest *request);
 
 */
 
@@ -52,17 +77,31 @@ type SysexMessage struct {
 	SysexProc        SysexProc
 }
 
-func MyCallback(x C.MIDISysexSendRequest) {
+func MyCallback(x *C.MIDISysexSendRequest) {
+	fmt.Println("MyCallback")
 	fmt.Println("callback with", x)
+
 }
 
-func NewSysexMessage(destination *Destination, data []byte, sysexProc SysexProc) (sysexMessage SysexMessage) {
+// we store it in a global variable so that the garbage collector
+// doesn't clean up the memory for any temporary variables created.
+var MyCallbackFunc = MyCallback
 
+func NewSysexMessage(destination *Destination, data []byte, sysexProc SysexProc) (sysexMessage SysexMessage) {
 	var SysexRequest C.MIDISysexSendRequest
-	SysexRequest.destination = destination.endpoint
-	SysexRequest.data = (*C.Byte)(unsafe.Pointer(&data[0]))
-	SysexRequest.bytesToSend = (C.UInt32)(len(data))
-	SysexRequest.completionProc = (C.MIDICompletionProc)(C.getSysexProc())
+
+	stringToCFString("test", func(cfName C.CFStringRef) {
+		SysexRequest.destination = destination.endpoint         //                        MIDIEndpointRef destination;
+		SysexRequest.data = (*C.Byte)(unsafe.Pointer(&data[0])) //                        const Byte *data
+		SysexRequest.bytesToSend = (C.UInt32)(len(data))        //                        UInt32 bytesToSend
+		//                                                                                Boolean complete;
+		//                                                                                Byte reserved[3];
+		SysexRequest.completionProc = (C.MIDICompletionProc)(C.getSysexProc()) //         MIDICompletionProc completionProc
+		//SysexRequest.completionProc = (C.MIDICompletionProc)(unsafe.Pointer(&MyCallbackFunc)) //         MIDICompletionProc completionProc
+		//SysexRequest.completionRefCon = unsafe.Pointer(cfName) //         void *completionRefCon
+		SysexRequest.completionRefCon = unsafe.Pointer(&MyCallbackFunc)
+
+	})
 
 	sysexMessage = SysexMessage{SysexRequest, sysexProc}
 
@@ -79,9 +118,9 @@ func NewInputPort(client Client, name string, readProc ReadProc) (inputPort Inpu
     stringToCFString(name, func(cfName C.CFStringRef) {
         osStatus := C.MIDIInputPortCreate(client.client,
             cfName,
-            (C.MIDIReadProc)(C.getProc()),
-            unsafe.Pointer(uintptr(0)),
-            &port)
+            (C.MIDIReadProc)(C.getProc()),       <<
+            unsafe.Pointer(uintptr(0)),          <<
+            &port)                               <<
 
         if osStatus != C.noErr {
             err = errors.New(fmt.Sprintf("%d: failed to create a port", int(osStatus)))
@@ -105,3 +144,22 @@ func (sysex *SysexMessage) Send() (err error) {
 
 	return
 }
+
+/*
+
+// for backup
+func NewSysexMessage(destination *Destination, data []byte, sysexProc SysexProc) (sysexMessage SysexMessage) {
+    var SysexRequest C.MIDISysexSendRequest
+
+    SysexRequest.destination = destination.endpoint
+    SysexRequest.data = (*C.Byte)(unsafe.Pointer(&data[0]))
+    SysexRequest.bytesToSend = (C.UInt32)(len(data))
+    SysexRequest.completionProc = (C.MIDICompletionProc)(C.getSysexProc())
+
+    sysexMessage = SysexMessage{SysexRequest, sysexProc}
+
+    return
+
+}
+
+*/

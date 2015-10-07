@@ -75,11 +75,11 @@ func NewInputPort(client Client, name string, readProc ReadProc) (inputPort Inpu
 	var port C.MIDIPortRef
 
 	stringToCFString(name, func(cfName C.CFStringRef) {
-		osStatus := C.MIDIInputPortCreate(client.client,
-			cfName,
-			(C.MIDIReadProc)(C.getProc()),
-			unsafe.Pointer(uintptr(0)),
-			&port)
+		osStatus := C.MIDIInputPortCreate(client.client, // C.MIDIClientRef client
+			cfName, //										C.CFStringRef portName
+			(C.MIDIReadProc)(C.getProc()), //				C.MIDIReadProc readProc
+			unsafe.Pointer(uintptr(0)),    //				void *refCon, - reference constant
+			&port) //										MIDIPortRef *outPort
 
 		if osStatus != C.noErr {
 			err = errors.New(fmt.Sprintf("%d: failed to create a port", int(osStatus)))
