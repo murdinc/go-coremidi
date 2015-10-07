@@ -7,14 +7,14 @@ package coremidi
 #include <unistd.h>
 
 
-extern void go_callback_int(MIDISysexSendRequest *prequest);
+extern void sysex_callback(MIDISysexSendRequest *prequest);
 
 static inline void MIDISysexProc(MIDISysexSendRequest *request)
 {
 
-    printf("WE OUT HERE data: %x\n\n", request->data);
-    printf("WE OUT HERE complete: %d\n\n", request->complete);
-    go_callback_int(request);
+    printf("(c )MIDISysexProcdata: %x\n\n", request->data);
+    printf("(c) MIDISysexProc complete: %d\n\n", request->complete);
+    sysex_callback(request);
 
 
 }
@@ -23,7 +23,8 @@ typedef void (*midi_sysex_proc)(MIDISysexSendRequest *request);
 
 static midi_sysex_proc getSysexProc()
 {
-  return *MIDISysexProc;
+    print("(c) midi_sysex_proc");
+    return *MIDISysexProc;
 }
 
 
@@ -37,16 +38,13 @@ import (
 
 import "fmt"
 
-//export go_callback_int
-func go_callback_int(p1 *C.MIDISysexSendRequest) {
-	fmt.Println("go_callback_int")
+//export sysex_callback
+func sysex_callback(p1 *C.MIDISysexSendRequest) {
+	fmt.Println("(go) sysex_callback")
 	fmt.Printf("Data: %X ( should be: 0xF0, 0x43, 0x20, 0x09, 0xF7 )", p1.data)
 
 	foo := *(*func(*C.MIDISysexSendRequest))(p1.completionRefCon)
 	foo(p1)
-
-	//foo := *(*func(C.int))(pfoo)
-	//foo(p1)
 }
 
 /*
